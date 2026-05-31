@@ -8,7 +8,7 @@
 
 ---
 
-## 0. How It Works — Plain English
+## 0. How It Works
 
 This section is the full flow in plain language. Sections 1–10 below contain the technical detail, code, and evidence.
 
