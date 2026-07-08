@@ -74,7 +74,94 @@ Grafana found rate formula excludes SUSTITUTO (4), SIN STOCK (5), and COMPUESTO 
 
 ---
 
-## 3. Full Analysis Flow (step-by-step drill-down)
+## 3. Order-Level Overview
+
+### Total orders (source: local CSV `all_orders_0701_FULL.csv`)
+
+| Metric | Count |
+|--------|-------|
+| **Total item lines** | **370,654** |
+| **Distinct orders** | **21,635** |
+| Orders with processed lines (excl status 0) | 20,784 |
+| Orders with only status 0 lines (not yet picked at export) | 851 |
+
+### Cancellations (source: Redshift `jumbo_bo.io_internal_orders`)
+
+337 orders cancelled on Jul 1 (status 41):
+
+| Cancelled by | Count | % |
+|-------------|-------|---|
+| Customer | 275 | 81.6% |
+| Jumbo staff (@jumbo.cl) | 55 | 16.3% |
+| Backoffice | 4 | 1.2% |
+| Cencosud staff (@cencosud.cl / @cencosud.com) | 3 | 0.9% |
+
+Of 337 cancelled orders:
+- **299** cancelled before picking (no item lines in CSV)
+- **38** had item lines in CSV (cancelled after partial/full pick)
+- Of those 38: 15 had OOS items — but all 15 were 100% wipeouts (every line OOS)
+- **OOS is NOT driving cancellations** — customers cancel for other reasons
+
+### Order-level fulfillment (source: local CSV, 20,784 orders with processed lines)
+
+**Item lines (excl status 0):**
+
+| Status | Meaning | Lines | % | CLP (M) |
+|--------|---------|-------|---|---------|
+| 1 | Picked OK | 329,598 | 93.2% | 1,500.1 |
+| 5 | OOS | 8,700 | 2.5% | 48.0 |
+| 4 | Substituted | 7,662 | 2.2% | 40.8 |
+| 11 | Added by customer | 3,763 | 1.1% | 19.7 |
+| 13 | Weight OOS | 2,657 | 0.8% | 41.0 |
+| 12 | Partial pick | 1,329 | 0.4% | 12.2 |
+| | **Total** | **353,709** | **100%** | **1,661.7** |
+
+**Quantity:**
+
+| Metric | Value |
+|--------|-------|
+| Qty ordered (SUM originalquantity) | 648,759 |
+| Qty delivered (SUM pickingquantity) | 619,013 (95.4%) |
+
+**Value (CLP):**
+
+| Metric | CLP | % |
+|--------|-----|---|
+| **Total ordered** | **1,661,729,669** | 100% |
+| Lost to OOS (status 5 + 13) | 88,995,906 | 5.4% |
+| Lost to substitution (status 4) | 40,805,047 | 2.5% |
+
+> Note: Substituted items (st4) have pickingquantity = 0 for the ORIGINAL item. The customer receives a substitute (st11 added line). Both the original and substitute lines exist in the data. Weight items (e.g., chicken, fish) have fractional originalquantity (e.g., 0.25 kg).
+
+### Order impact summary
+
+| Category | Orders | % of 20,784 |
+|----------|--------|-------------|
+| **Clean** (no OOS, no substitution) | **10,003** | **48.1%** |
+| Had any OOS (status 5 or 13) | 7,318 | 35.2% |
+| Had substitution (status 4) | 5,605 | 27.0% |
+| Had OOS AND substitution | 2,142 | 10.3% |
+| Had partial pick (status 12) | 1,239 | 6.0% |
+
+**51.9% of all processed orders had at least one item affected by OOS or substitution.**
+**89M CLP lost to OOS alone.**
+
+### Connection: orders → item lines → Pop A/B
+
+```
+21,635 orders in CSV (370,654 item lines)
+├─ 20,784 with processed lines (excl status 0)
+│  ├─ 10,003 clean (no OOS, no sub)
+│  └─ 10,781 had OOS or sub or both
+│     ├─ 8,393 status-5 OOS lines → Pop A (1,482) + Pop B (6,911)  ← Sections 5–6
+│     ├─ 2,657 status-13 weight OOS lines → NOT in Pop A/B
+│     └─ 7,662 status-4 substitution lines
+└─ 851 orders with only status 0 (not yet picked at export)
+```
+
+---
+
+## 4. Full Analysis Flow (step-by-step drill-down)
 
 ### Step 1: Start with all order lines
 
@@ -113,6 +200,10 @@ HANA said this item was out of stock BEFORE the customer ordered. What happened 
 | 0 | Not picked (CSV export artifact) | 345 | 0.02 |
 
 Key finding: **10,903 false alarms** — HANA said stock was 0 but picker found it anyway. These are cases where HANA underreported stock (ERP book < physical shelf). File: `analysis/evidence_false_alarms_10903_v2.csv`
+
+Sample OOS line (status 5):
+> `v232195165jmch-01 | J403 | 1860109 | Yogurt Artesanal Mermelada Damasco 200 g | qty=4 | pick=0 | 6,360 CLP | 2026-07-01 09:53:48`
+> Customer ordered 4 yogurts, picker found zero on shelf, HANA already showed ≤ 0 before the order.
 
 ### Step 4b: HANA > 0 branch → 343,195 order lines
 
@@ -161,7 +252,7 @@ Status 0 (`NO_PICKING` = "sin pickear") appears in the CSV (16,945 lines) but ha
 
 ---
 
-## 4. Population A — Propagation Gap (HANA ≤ 0, picker OOS)
+## 5. Population A — Propagation Gap (HANA ≤ 0, picker OOS)
 
 **Definition:** Picker marked OOS AND HANA showed ≤ 0 before the order was placed.
 **Root cause:** HANA already knew stock was zero, but the signal never propagated to VTEX → customer ordered anyway.
@@ -204,9 +295,31 @@ Status 0 (`NO_PICKING` = "sin pickear") appears in the CSV (16,945 lines) but ha
 | Stock existed elsewhere (any order) | 451 | 30.4% |
 | Stock present at pick time (before) | 305 | 20.6% |
 
+### Sample rows — Pop A
+
+**Tier 1 (PICKER MISS — strongest evidence):**
+
+| order_id | store | refid | name | CLP | HANA qty | got_before |
+|----------|-------|-------|------|-----|----------|------------|
+| v232237296jmch-01 | J403 | 2052786 | Chocolates Mars Bolsa Mix 508 g | 7,122 | -1 | 3 |
+| v232239068jmch-01 | J403 | 2071569 | Plantillas Hokkairo para Zapatos | 4,990 | 0 | 1 |
+| v232233562jmch-01 | J403 | 2076048 | Lavaloza Quix Ultra Concentrado | 3,000 | 0 | 1 |
+
+> Interpretation: HANA said 0 (or negative), picker marked OOS, but 1–3 OTHER orders picked the same item at/before this order. The stock was there — picker missed it.
+
+**Tier 4 (CONFIRMED STOCKOUT — multiple orders, all failed):**
+
+| order_id | store | refid | name | CLP | HANA qty | orders_tried |
+|----------|-------|-------|------|-----|----------|-------------|
+| v232233562jmch-01 | J403 | 1835024 | Cortador de Vegetales Spiralizer | 2,394 | 0 | 2 |
+| v232209209jmch-01 | J403 | 1983863 | Mantel PVC Protector Redondo | 2,994 | -1 | 2 |
+| v232266673jmch-01 | J403 | 1907741 | Tetera Vidrio 800 ml | 3,594 | -7 | 4 |
+
+> Interpretation: HANA said 0 (or negative), multiple orders tried this item all day, ALL failed. Real stockout confirmed by both HANA and picker, across multiple independent attempts.
+
 ---
 
-## 5. Population B — Phantom Inventory (HANA > 0, picker OOS)
+## 6. Population B — Phantom Inventory (HANA > 0, picker OOS)
 
 **Definition:** Picker marked OOS AND HANA showed > 0 before the order was placed.
 **Root cause:** HANA book stock ≠ physical shelf stock. ERP says units exist, but shelf is empty.
@@ -249,9 +362,21 @@ Status 0 (`NO_PICKING` = "sin pickear") appears in the CSV (16,945 lines) but ha
 | Stock existed elsewhere (any order) | 2,866 | 41.5% |
 | Stock present at pick time (before) | 2,147 | 31.1% |
 
+### Sample rows — Pop B
+
+**Tier 1 (PICKER MISS — HANA showed stock, picker missed it):**
+
+| order_id | store | refid | name | CLP | HANA qty | got_before |
+|----------|-------|-------|------|-----|----------|------------|
+| v232214199jmch-01 | J403 | 1995694-KG | Bistec de Asiento Bandeja 300 g | 6,228 | 0.67 | 2 |
+| v232230070jmch-01 | J403 | 2044469 | Cinnamon Bread Jumbo un. | 3,490 | 6 | 5 |
+| v232238985jmch-01 | J403 | 255541 | Blanqueador Ropa Klären Ultra 250 g | 3,290 | 13 | 1 |
+
+> Interpretation: HANA said stock > 0 (even 13 units in one case), picker marked OOS, but other orders successfully picked the same item. Classic phantom inventory — the stock exists but the picker couldn't find it or chose not to.
+
 ---
 
-## 6. Combined Summary
+## 7. Combined Summary
 
 | | Pop A (HANA ≤ 0) | Pop B (HANA > 0) | **Combined** |
 |---|---|---|---|
@@ -273,7 +398,7 @@ Status 0 (`NO_PICKING` = "sin pickear") appears in the CSV (16,945 lines) but ha
 
 ---
 
-## 7. Methodology: How We Got Here
+## 8. Methodology: How We Got Here
 
 ### Step-by-step (what we did, in order)
 
@@ -358,7 +483,7 @@ From confirmation tiers:
 
 ---
 
-## 8. Scripts Reference
+## 9. Scripts Reference
 
 | Script | What it does | Data sources | Redshift needed? |
 |--------|-------------|--------------|------------------|
@@ -381,7 +506,7 @@ Without this, DuckDB auto-detects dateupdate as TIMESTAMP and chokes on 'None' s
 
 ---
 
-## 9. Confirmation Tier Logic
+## 10. Confirmation Tier Logic
 
 ```sql
 CASE
@@ -404,7 +529,7 @@ END
 
 ---
 
-## 10. Open Questions / Decisions
+## 11. Open Questions / Decisions
 
 1. **Status 13 (Compuesto, weight OOS):** 2,657 lines in CSV / 3,054 in Redshift, ~48M CLP total. All weight/deli items (chicken, fish, beef, pasta by kg). Not in Pop A/B because filter is `status IN (3,5,7,14)`. Grafana already treats them as OOS. Decision: include as separate analysis or keep out of scope?
 
@@ -414,58 +539,109 @@ END
 
 ---
 
-## 11. Reproducing for Jul 6 / Jul 7
+## 12. Reproducing for Jul 6 / Jul 7
 
-### Prerequisites
+### Current status (as of 2026-07-08)
 
-1. **HANA parquets** for the date: `data_samples/vw_daily_nrt_MMDD_*/*.parquet`
-2. **Orders CSV** for the date: export from Redshift
-3. **VPN connected** for Redshift queries in evidence_pack.py
-4. (Optional) **VTEX SQS events**: `analysis/vtex_all_YYYYMMDD_*.jsonl`
+| Resource | Jul 6 | Jul 7 |
+|----------|-------|-------|
+| **HANA parquets** | ✅ 17 batches (04:40–23:41) | ✅ 24 batches (00:41–23:41) |
+| **Orders CSV** | ❌ Not exported | ❌ Not exported |
+| **Export script** | ✅ `scripts/export_orders_0706.py` | ❌ Need to create |
+| **VTEX SQS** | ✅ `vtex_all_20260706_204454.jsonl` (556M) | ✅ `vtex_all_20260707_192702.jsonl` (929M) |
+| **evidence_pack.py** | Needs date parameters changed | Same |
 
-### Steps
+### HANA batch times
+
+**Jul 6 (17 batches):**
+```
+04:40  05:41  06:40  07:40  08:40  09:40  10:40  11:40  12:41
+13:40  14:40  15:41  16:41  17:41  21:40  22:40  23:41
+```
+Note: Gap from 17:41 to 21:40 (3 hours missing vs Jul 1's 4-hour gap). No 03:41 batch (Jul 1 had one).
+
+**Jul 7 (24 batches):**
+```
+00:41  01:41  02:40  03:41  04:40  05:41  06:40  07:40  08:40  09:41  10:41  11:40
+12:40  13:40  14:40  15:40  16:41  17:41  18:41  19:40  20:41  21:40  22:41  23:41
+```
+Note: Full 24-hour coverage including overnight batches. Most complete day we have.
+
+### Steps to reproduce
 
 ```bash
-# 1. Export orders CSV (needs VPN + Redshift)
+# ────────────────────────────────────────────────
+# STEP 1: Export orders CSV (needs VPN + Redshift)
+# ────────────────────────────────────────────────
+
+# Jul 6 (script exists)
 python3.11 scripts/export_orders_0706.py
 
-# 2. Verify HANA parquets exist
-ls data_samples/vw_daily_nrt_0706_*/
+# Jul 7 (copy and modify export_orders_0706.py)
+# Change: '2026-07-06' → '2026-07-07', '2026-07-07' → '2026-07-08'
+# Change: output filename to all_orders_0707_FULL.csv
+cp scripts/export_orders_0706.py scripts/export_orders_0707.py
+# Then edit dates and output path
+python3.11 scripts/export_orders_0707.py
 
-# 3. Modify evidence_pack.py for new date:
-#    - HANA glob: vw_daily_nrt_0706_*
-#    - CSV path: all_orders_0706_FULL.csv
-#    - Redshift dates: '2026-07-06'
-#    - Output: evidence_pack_jul6.xlsx
+# ────────────────────────────────────────────────
+# STEP 2: Verify HANA parquets
+# ────────────────────────────────────────────────
+ls data_samples/vw_daily_nrt_0706_*/   # should show 17 folders
+ls data_samples/vw_daily_nrt_0707_*/   # should show 24 folders
 
-# 4. Run (needs VPN for Redshift)
+# ────────────────────────────────────────────────
+# STEP 3: Run delay_proof (local only, no Redshift)
+# ────────────────────────────────────────────────
+# Modify scripts/delay_proof_0701.py:
+#   - HANA glob: vw_daily_nrt_0706_* (or 0707)
+#   - CSV path: all_orders_0706_FULL.csv (or 0707)
+#   - Output: delay_proof_0706_preventable_v2.parquet (or 0707)
+python3.11 scripts/delay_proof_0706.py
+
+# ────────────────────────────────────────────────
+# STEP 4: Run evidence_pack (needs VPN for Redshift)
+# ────────────────────────────────────────────────
+# Modify scripts/evidence_pack.py:
+#   - HANA glob: vw_daily_nrt_0706_*
+#   - CSV path: all_orders_0706_FULL.csv
+#   - Redshift date filter: '2026-07-06'
+#   - Output: evidence_pack_jul6.xlsx
 python3.11 scripts/evidence_pack.py
 
-# 5. Check outputs
-ls -la analysis/evidence_pack_jul6.xlsx analysis/evidence_*.csv
-```
-
-### SQS drain env vars
-
-```bash
-# Jul 6 (already drained → analysis/vtex_all_20260706_204454.jsonl, 1.44M events)
-export KEEP_FROM_MS=1783310400000  # 2026-07-06 00:00:00 UTC
-export KEEP_TO_MS=1783396800000    # 2026-07-07 00:00:00 UTC
-
-# Jul 7 (already drained → analysis/vtex_all_20260707_192702.jsonl, 2.40M events)
-export KEEP_FROM_MS=1783396800000  # 2026-07-07 00:00:00 UTC
-export KEEP_TO_MS=1783483200000    # 2026-07-08 00:00:00 UTC
+# ────────────────────────────────────────────────
+# STEP 5: Verify outputs
+# ────────────────────────────────────────────────
+ls -la analysis/evidence_pack_jul6.xlsx
+wc -l analysis/evidence_*.csv
 ```
 
 ### Key files per date
 
 | File | Jul 1 | Jul 6 | Jul 7 |
 |------|-------|-------|-------|
-| Orders CSV | `all_orders_0701_FULL.csv` | TBD | TBD |
-| HANA parquets | `vw_daily_nrt_0701_*` (18 batches) | TBD | TBD |
-| VTEX SQS | `vtex_events_*.jsonl` (70 files) | `vtex_all_20260706_*.jsonl` | `vtex_all_20260707_*.jsonl` |
-| Evidence Excel | `evidence_pack_jul1.xlsx` | TBD | TBD |
-| Pop A CSV | `evidence_1273.csv` (1,482) | TBD | TBD |
-| Pop B CSV | `evidence_5870.csv` (6,911) | TBD | TBD |
-| False alarms | `evidence_false_alarms_10903_v2.csv` | TBD | TBD |
-| Preventable parquet | `delay_proof_0701_preventable_v2.parquet` | TBD | TBD |
+| Orders CSV | `all_orders_0701_FULL.csv` | ❌ not exported | ❌ not exported |
+| HANA parquets | `vw_daily_nrt_0701_*` (18 batches) | `vw_daily_nrt_0706_*` (17 batches) | `vw_daily_nrt_0707_*` (24 batches) |
+| VTEX SQS | `vtex_events_*.jsonl` (70 files) | `vtex_all_20260706_204454.jsonl` (556M) | `vtex_all_20260707_192702.jsonl` (929M) |
+| Export script | `export_orders_0701.py` | `export_orders_0706.py` | ❌ need to create |
+| Evidence Excel | `evidence_pack_jul1.xlsx` | ❌ pending | ❌ pending |
+| Pop A CSV | `evidence_1273.csv` (1,482) | ❌ pending | ❌ pending |
+| Pop B CSV | `evidence_5870.csv` (6,911) | ❌ pending | ❌ pending |
+| False alarms | `evidence_false_alarms_10903_v2.csv` | ❌ pending | ❌ pending |
+| Preventable parquet | `delay_proof_0701_preventable_v2.parquet` | ❌ pending | ❌ pending |
+
+### Blockers
+
+1. **Orders CSV export** — needs VPN + Redshift connection. Run `export_orders_0706.py` first.
+2. **evidence_pack.py** — needs VPN for 2 live Redshift queries (io_internal_orders + io_picking).
+3. **Jul 7 export script** — copy from 0706 and change dates.
+
+### DuckDB read gotcha (same for all dates)
+
+```python
+read_csv_auto('path.csv',
+    nullstr='None',
+    types={'dateupdate': 'VARCHAR',
+           'inicio_picking': 'VARCHAR',
+           'fin_picking': 'VARCHAR'})
+```
