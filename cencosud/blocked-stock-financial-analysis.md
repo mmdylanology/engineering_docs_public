@@ -26,11 +26,15 @@ An audit of the **July 10, 2026, 11:41 CLT** inventory snapshot across **41 phys
 ### Valuation Math (How the numbers are calculated)
 We valued the blocked inventory using the **Weighted Average Cost (CPP - Costo Promedio Ponderado)** recorded by the ERP system in SAP. This represents the book value of the stock.
 
-$$\text{Blocked Inventory Value (CLP)} = \sum \left(\text{Ending\_On\_Hand\_CPP\_Cost\_Amt}\right)$$
+```
+Blocked Inventory Value (CLP) = SUM(Ending_On_Hand_CPP_Cost_Amt)
+```
 
 Which is mathematically equivalent to:
 
-$$\text{Blocked Inventory Value (CLP)} = \sum \left(\text{Ending\_On\_Hand\_Qty} \times \text{Item\_CPP\_Cost\_Amt}\right)$$
+```
+Blocked Inventory Value (CLP) = SUM(Ending_On_Hand_Qty * Item_CPP_Cost_Amt)
+```
 
 *Note: USD conversion is calculated using a standard reporting exchange rate of **`1 USD = 920 CLP`**.*
 
