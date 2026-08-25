@@ -81,23 +81,29 @@ pie title Order Lines by Status — 5-Day Total (1.92M lines)
 
 **Formulas:**
 - **OOS Rate** = (status 5 + 14) / total lines
-- **Found Rate** = status 1 / (total - status 11) — status 11 excluded since picker-added items aren't customer orders
+- **OOS Broad** = (status 3 + 5 + 13 + 14) / total lines — includes pre-validation and weight-item OOS
+- **Found Rate (strict)** = status 1 / (total - status 11) — picked exactly as ordered
+- **Found + Substitute** = (status 1 + 4) / (total - status 11) — includes substitutions
+- **Found + Sub + Partial** = (status 1 + 4 + 12) / (total - status 11) — includes partial fills
+- **Found + Sub + Partial + Added** = (status 1 + 4 + 11 + 12) / (total - status 11) — all positive outcomes
+- Status 11 excluded from denominator: picker-added items aren't customer orders
 - **Status 13** is effectively OOS (pickingqty=0) but uses a separate code for weight items. 12,802 lines (198.4M CLP) flagged but not classified.
 
 ---
 
 ## 3. Multi-Day Summary
 
-| Day | Lines | Orders | Stores | Revenue (M) | OOS Lines | OOS Rate | Found Rate |
-|-----|------:|-------:|-------:|------------:|----------:|---------:|---------:|
-| Aug 11 | 361,215 | 22,145 | 34 | 1,676.9 | 10,737 | 2.97% | 93.33% |
-| Aug 12 | 343,503 | 21,267 | 34 | 1,606.2 | 8,875 | 2.58% | 94.19% |
-| Aug 15 | 495,287 | 27,628 | 33 | 2,149.3 | 13,518 | 2.73% | 93.85% |
-| Aug 19 | 341,809 | 21,422 | 36 | 1,635.1 | 8,187 | 2.40% | 94.34% |
-| Aug 20 | 379,956 | 22,992 | 36 | 1,817.3 | 8,462 | 2.23% | 94.72% |
-| **Total** | **1,921,770** | **115,454** | | **8,884.8** | **49,779** | **2.59%** | **94.11%** |
+| Day | Lines | Orders | OOS | OOS Rate | Found (1) | +Sub (1+4) | +Partial (1+4+12) | +Added (1+4+11+12) |
+|-----|------:|-------:|----:|---------:|----------:|-----------:|-------------------:|--------------------:|
+| Aug 11 | 361,215 | 22,145 | 10,737 | 2.97% | 93.33% | 95.90% | 96.34% | 97.57% |
+| Aug 12 | 343,503 | 21,267 | 8,875 | 2.58% | 94.19% | 96.38% | 96.78% | 97.96% |
+| Aug 15 | 495,287 | 27,628 | 13,518 | 2.73% | 93.85% | 96.18% | 96.64% | 97.98% |
+| Aug 19 | 341,809 | 21,422 | 8,187 | 2.40% | 94.34% | 96.41% | 96.79% | 97.90% |
+| Aug 20 | 379,956 | 22,992 | 8,462 | 2.23% | 94.72% | 96.60% | 96.98% | 98.01% |
+| **Total** | **1,921,770** | **115,454** | **49,779** | **2.59%** | **94.11%** | **96.11%** | **96.55%** | **97.81%** |
 
 > Aug 15 is the largest day (Friday effect — 37% more orders than average).
+> Substitutions add ~2.2-2.6pp to the found rate. Partials add ~0.4pp. Picker-added items add ~1.0pp.
 
 ### OOS Rate Trend
 
@@ -109,14 +115,17 @@ xychart-beta
     line [2.97, 2.58, 2.73, 2.40, 2.23]
 ```
 
-### Found Rate Trend
+### Fulfillment Tier Trend
 
 ```mermaid
 xychart-beta
-    title "Found Rate Trend — Aug 2026"
+    title "Fulfillment Rate by Tier — Aug 2026"
     x-axis ["Aug 11", "Aug 12", "Aug 15", "Aug 19", "Aug 20"]
-    y-axis "Found Rate (%)" 92.5 --> 95.0
-    line [93.33, 94.19, 93.85, 94.34, 94.72]
+    y-axis "Rate (%)" 92.5 --> 98.5
+    line "Found (1)" [93.33, 94.19, 93.85, 94.34, 94.72]
+    line "+Sub (1+4)" [95.90, 96.38, 96.18, 96.41, 96.60]
+    line "+Part (1+4+12)" [96.34, 96.78, 96.64, 96.79, 96.98]
+    line "+Added (1+4+11+12)" [97.57, 97.96, 97.98, 97.90, 98.01]
 ```
 
 ### Order Volume by Day
