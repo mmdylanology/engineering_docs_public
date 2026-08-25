@@ -1,4 +1,4 @@
-# OOS Root Cause Classification — Master Report
+# OOS  — Master Report
 
 > **Period**: Aug 11, 12, 15, 19, 20 (2026) — 5 clean analysis days
 > **Excluded**: Aug 13-14 (Spark/PUBLICADOR outage)
