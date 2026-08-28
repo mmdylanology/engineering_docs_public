@@ -13,7 +13,7 @@ Phantom OOS occurs when the system shows stock available (PUBLICADOR = PUBLICAR,
 | Finding | Detail |
 |---------|--------|
 | **Depletion is NOT the main cause** | Only 1.1% of phantom cases were depleted by prior picked orders. 78.7% had zero prior picks. |
-| **Mostly transient** | 69.2% of phantom pairs appear on only 1 day. 17.1% persist day-to-day. |
+| **Mostly transient** | 18,000 of 23,207 phantom-ever pairs (77.6%) appear on only 1 day. Only 17.1% persist day-to-day. |
 | **Dark stores dominate volume, not rate** | Phantom rate is near-identical (DARK 89.4% vs REGULAR 89.0%), but dark stores have 3.3x the CLP exposure. |
 | **Stacking doesn't explain it** | Phantom rate is 85-89% across all volume buckets — high-demand SKUs aren't more phantom. |
 | **Root cause: shelf-level discrepancy** | HANA/PUBLICADOR reports stock, but physical shelf is empty. This is a store operations problem, not a pipeline problem. |
@@ -169,10 +169,10 @@ Dark stores do show slightly higher depletion ratios (0.07 vs 0.03) and more pri
 
 | From \ To | PHANTOM | PICKED OK | NOT ORDERED | TRANSITION | OTHER |
 |-----------|--------:|----------:|------------:|-----------:|------:|
-| **PHANTOM** | **4,136 (17.1%)** | 6,232 (25.8%) | 11,498 (47.7%) | 272 (1.1%) | 1,982 (8.2%) |
-| **PICKED OK** | 5,997 (28.3%) | 9,478 (44.8%) | 4,589 (21.7%) | 135 (0.6%) | 1,017 (4.8%) |
-| **NOT ORDERED** | 11,251 (26.9%) | 5,110 (12.2%) | 23,904 (57.1%) | 151 (0.4%) | 1,163 (2.8%) |
-| **TRANSITION** | 274 (35.6%) | 151 (19.6%) | 212 (27.6%) | 87 (11.3%) | 45 (5.9%) |
+| **PHANTOM** (24,120) | **4,136 (17.1%)** | 6,232 (25.8%) | 11,498 (47.7%) | 272 (1.1%) | 1,982 (8.2%) |
+| **PICKED OK** (21,216) | 5,997 (28.3%) | 9,478 (44.7%) | 4,589 (21.6%) | 135 (0.6%) | 1,017 (4.8%) |
+| **NOT ORDERED** (41,579) | 11,251 (27.1%) | 5,110 (12.3%) | 23,904 (57.5%) | 151 (0.4%) | 1,163 (2.8%) |
+| **TRANSITION** (769) | 274 (35.6%) | 151 (19.6%) | 212 (27.6%) | 87 (11.3%) | 45 (5.9%) |
 
 ### Phantom Day-to-Day Outcomes
 
