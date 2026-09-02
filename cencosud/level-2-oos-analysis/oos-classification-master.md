@@ -7,6 +7,75 @@
 
 ---
 
+## Executive Summary
+
+Across 5 analysis days in August 2026, we classified **49,779 out-of-stock order lines** from **1.92M total order lines** to determine **why customers see items as available on jumbo.cl but the picker finds an empty shelf**.
+
+### Key Numbers
+
+| Metric | Value |
+|--------|-------|
+| **OOS Rate** | 2.59% average (improving: 2.97% → 2.23% over the period) |
+| **Perfect orders** | 46.8% — every item picked exactly as ordered, no substitutions |
+| **Orders affected by OOS** | 28.8% of orders have ≥1 missing item (not delivered) |
+| **Orders with substitution only** | ~17.8% — item replaced, no missing items |
+| **Found Rate (strict)** | 94.1% — item-level, picked exactly as ordered |
+| **Found Rate (all positive)** | 97.8% — including substitutions, partials, and picker-added items |
+| **Typical OOS impact per order** | 1 item missing out of ~22 (93% of the order delivered) |
+| **Total OOS exposure** | 267.5M CLP across 5 days (~53.5M CLP/day) |
+
+### Root Cause Attribution
+
+```mermaid
+pie title Why Are Items Out of Stock? (49,779 lines)
+    "Phantom Inventory — 87% (Store Ops)" : 43121
+    "Stock Depletion — 12% (Unavoidable)" : 6106
+    "Pipeline Delay — 1% (PUBLICADOR→VTEX)" : 552
+```
+
+| Root Cause | Share | Description | Owner |
+|------------|------:|-------------|-------|
+| **Phantom inventory** | 86.6% | HANA/PUBLICADOR reports stock available, shelf is empty. Identical rate in dark stores (89.4%) and regular stores (89.0%) — not caused by shared inventory with walk-in customers. 78.7% of phantom items had zero prior ecommerce picks. | Store Operations |
+| **Stock depletion** | 12.3% | Stock legitimately ran out between PUBLICADOR batches. Customer ordered while item was still published, but stock depleted before picker arrived. | Unavoidable |
+| **Pipeline delay** | 0.7% | PUBLICADOR sent NO PUBLICAR but VTEX hadn't processed the update yet, or item blocked all day but still orderable. | PUBLICADOR→VTEX Pipeline |
+| **Catalog gap** | 0.4% | Item+store pair not found in any PUBLICADOR batch. New items or mapping gaps. | Catalog Ops |
+
+### Phantom Diagnosis — Why Is the Shelf Empty?
+
+We tracked 25,999 unique (SKU, store) pairs that went OOS across 5 days and tested every hypothesis:
+
+| Hypothesis | Test | Result | Verdict |
+|------------|------|--------|---------|
+| **Prior ecommerce orders depleted stock** | Checked if earlier picked orders consumed the PUBLICADOR-reported qty before the OOS order | Only 1.1% fully depleted. **78.7% of phantom items had zero prior picks** — shelf was already empty when the first order came in. | Ruled out |
+| **Walk-in customers took the stock** | Compared dark stores (no walk-in traffic) vs regular stores (shared inventory with physical customers) | Phantom rate nearly identical: dark 89.4% vs regular 89.0%. If walk-ins were the cause, regular stores should be much higher. | Ruled out |
+| **High-demand SKUs get depleted faster** | Correlated order volume per SKU+store with phantom rate | Phantom rate flat at 85-89% across all volume buckets — even single-order SKUs are phantom 88.7% of the time. | Ruled out |
+| **Persistent shelf gap (HANA overestimates stock)** | Tracked same (SKU, store) pairs across 5 days | 77.6% transient (1 day only), but 360 chronic pairs phantom every day. 17.1% of phantom items stay phantom the next day. | **Primary cause** |
+
+**Conclusion:** The root cause is **shelf-level inventory inaccuracy**. SAP/HANA reports stock on hand, PUBLICADOR correctly publishes it, VTEX correctly shows it to the customer — but the physical item is not on the shelf. This is not a pipeline problem, not a demand problem, and not a shared-inventory problem. It is a store operations problem: cycle counting gaps, shrinkage, misplacement, or receiving errors.
+
+### What This Means
+
+1. **The PUBLICADOR→VTEX pipeline is not the problem.** Less than 1% of OOS is caused by propagation delays. Pipeline optimization has diminishing returns.
+
+2. **Dark stores are the highest-value target.** Dark stores (J4xx/J5xx) have 3.3× the CLP exposure (~41M CLP/day) despite the same phantom rate as regular stores. Fixing inventory accuracy in dark stores yields the highest ROI.
+
+3. **Most phantom cases are transient (1-day).** 77.6% of phantom (SKU, store) pairs appear on only 1 day. But 360 chronic pairs (phantom 4-5 consecutive days) are persistent shelf gaps that should trigger automatic cycle counts.
+
+4. **Top offending categories: meat, produce, fruit.** Items with high physical shrinkage and inventory count inaccuracy dominate the phantom list.
+
+### Recommendations
+
+| # | Action | Target | Expected Impact |
+|---|--------|--------|-----------------|
+| 1 | **Cycle count program for chronic phantom pairs** | 360 pairs with 4-5 day persistence | Eliminate ~20M CLP/5-day chronic exposure |
+| 2 | **Dark store inventory audit** | J4xx/J5xx stores (18,104 OOS pairs) | Reduce 204.6M CLP/5-day dark store OOS |
+| 3 | **PUBLICAR threshold adjustment** | Publish only when HANA qty ≥ N (not qty ≥ 1) | Prevent ~4,244 recurring phantom pairs |
+| 4 | **Fix negative/zero stock publishing** | A1+A2: 2,098 lines published with qty ≤ 0 | Quick win — PUBLICADOR rule change |
+
+> **Bottom line:** OOS rate is improving (2.97% → 2.23%), and the pipeline is healthy. The next lever is store-level inventory accuracy — specifically, closing the gap between what HANA reports and what is physically on the shelf. Dark stores and chronic phantom pairs are the highest-ROI targets.
+
+---
+
 ## 1. Data Sources
 
 | Source | Description | Per Day |
@@ -396,14 +465,14 @@ pie title Aug 20 — OOS Classification
 |----------------|-------:|-------:|-------:|-------:|-------:|----:|
 | Phantom (store) | 85.0% | 85.6% | 86.5% | 88.0% | 88.6% | **86.6%** |
 | Depletion (unavoidable) | 14.6% | 13.7% | 10.9% | 11.1% | 11.0% | **12.3%** |
-| Pipeline delay (GIV) | 0.3% | 0.5% | 1.3% | 0.8% | 0.3% | **0.7%** |
+| Pipeline delay | 0.3% | 0.5% | 1.3% | 0.8% | 0.3% | **0.7%** |
 | Catalog gap | 0.0% | 0.2% | 1.2% | 0.1% | 0.2% | **0.4%** |
 
 ```mermaid
 pie title OOS by Responsibility — 5-Day Total (49,779 lines)
     "Phantom — Store/Physical (86.6%)" : 43121
     "Depletion — Unavoidable (12.3%)" : 6106
-    "Pipeline Delay — GIV (0.7%)" : 339
+    "Pipeline Delay (0.7%)" : 339
     "Catalog Gap (0.4%)" : 213
 ```
 

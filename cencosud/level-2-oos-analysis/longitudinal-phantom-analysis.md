@@ -201,7 +201,7 @@ pie title What Happens After a Phantom Day? (24,120 transitions)
 | **Shelf-level inventory inaccuracy** | 89% phantom rate identical across dark and regular stores; 78.7% have zero prior picks | 85% of OOS lines | Store Operations |
 | **Organic stock depletion (B1)** | B1_TRANSITION: stock ran out between PUB batches | 12-15% of OOS lines | Unavoidable |
 | **Ecommerce order depletion** | 1.1% fully depleted by prior picks | < 2% of OOS lines | Minor factor |
-| **Pipeline delay (B2+C)** | PUBLICADOR blocked or delayed | 0.3-0.5% of OOS lines | GIV Pipeline |
+| **Pipeline delay (B2+C)** | PUBLICADOR blocked or delayed | 0.3-0.5% of OOS lines | PUBLICADOR→VTEX Pipeline |
 
 ### Recommendations
 
@@ -211,7 +211,7 @@ pie title What Happens After a Phantom Day? (24,120 transitions)
 
 3. **Threshold-based safety stock** — For the 4,244 recurring phantom pairs (2-3 days), consider reducing the PUBLICAR threshold: if HANA qty < N, flag as NO PUBLICAR. Current system publishes even at qty=1, which is not enough safety margin for items with shelf discrepancies.
 
-4. **Pipeline delay is solved** — B2+C is 0.3-0.5% of OOS lines. The GIV pipeline is not the primary problem.
+4. **Pipeline delay is negligible** — B2+C is 0.3-0.5% of OOS lines. The PUBLICADOR→VTEX propagation pipeline is not the primary problem.
 
 ---
 
