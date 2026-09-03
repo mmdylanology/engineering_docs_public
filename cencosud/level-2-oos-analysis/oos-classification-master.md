@@ -461,12 +461,12 @@ pie title Aug 20 — OOS Classification
 
 ### Responsibility Split
 
-| Responsibility | Aug 11 | Aug 12 | Aug 15 | Aug 19 | Aug 20 | Avg |
-|----------------|-------:|-------:|-------:|-------:|-------:|----:|
-| Phantom (store) | 85.0% | 85.6% | 86.5% | 88.0% | 88.6% | **86.6%** |
-| Depletion (unavoidable) | 14.6% | 13.7% | 10.9% | 11.1% | 11.0% | **12.3%** |
-| Pipeline delay | 0.3% | 0.5% | 1.3% | 0.8% | 0.3% | **0.7%** |
-| Catalog gap | 0.0% | 0.2% | 1.2% | 0.1% | 0.2% | **0.4%** |
+| Responsibility          | Aug 11 | Aug 12 | Aug 15 | Aug 19 | Aug 20 | Avg       |
+| -------------------------| -------:| -------:| -------:| -------:| -------:| ----------:|
+| Phantom (store)         | 85.0%  | 85.6%  | 86.5%  | 88.0%  | 88.6%  | **86.6%** |
+| Depletion (unavoidable) | 14.6%  | 13.7%  | 10.9%  | 11.1%  | 11.0%  | **12.3%** |
+| Pipeline delay          | 0.3%   | 0.5%   | 1.3%   | 0.8%   | 0.3%   | **0.7%**  |
+| Catalog gap             | 0.0%   | 0.2%   | 1.2%   | 0.1%   | 0.2%   | **0.4%**  |
 
 ```mermaid
 pie title OOS by Responsibility — 5-Day Total (49,779 lines)
